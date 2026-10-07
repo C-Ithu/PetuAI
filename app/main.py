@@ -3,12 +3,13 @@ from datetime import datetime, timezone, timedelta
 import json
 import re
 import urllib.request
+import urllib.parse
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="PetuCV", version="2.1.0")
+app = FastAPI(title="PetuCV", version="2.2.0")
 WEB = Path(__file__).parent / "web" / "index.html"
 
 @app.get("/", include_in_schema=False)
@@ -17,7 +18,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PetuCV", "version": "2.1.0"}
+    return {"status": "ok", "service": "PetuCV", "version": "2.2.0"}
 
 class SearchRequest(BaseModel):
     keywords: list[str] = Field(min_length=1, max_length=20)
@@ -27,7 +28,7 @@ def clean(value):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 def get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.1.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.2.0", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read())
 
@@ -246,6 +247,49 @@ def jobs(item: SearchRequest):
     except Exception:
         errors.append("arbeitnow")
 
+    # Bolsa Nacional de Empleo (BNE): public search pages, queried with CV role terms.
+    # BNE has no documented public JSON API, so only public result pages are used.
+    try:
+        bne_terms = list(dict.fromkeys(recent_terms + terms))[:8]
+        for term in bne_terms:
+            query = urllib.parse.urlencode({
+                "clasificarYPaginar": "true",
+                "mostrar": "empleo",
+                "numPaginaRecuperar": 1,
+                "numResultadosPorPagina": 50,
+                "textoLibre": term,
+            })
+            url = "https://www.bne.cl/ofertas?" + query
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 PetuCV/2.2"})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                html = response.read().decode("utf-8", errors="ignore")
+            # Capture public offer links and nearby visible card text.
+            matches = list(re.finditer(r'href=["\\\'](/oferta/[^"\\\']+)["\\\']', html, re.I))
+            for match in matches:
+                offer_url = "https://www.bne.cl" + match.group(1)
+                start = max(0, match.start() - 1800)
+                end = min(len(html), match.end() + 600)
+                card = clean(html[start:end])
+                age = re.search(r"Hace\\s+(\\d+)\\s+d[ií]as?", card, re.I)
+                if age and int(age.group(1)) > 5:
+                    continue
+                if not age and not re.search(r"\\bHoy\\b|Hace\\s+[1-5]\\s+d[ií]as?", card, re.I):
+                    continue
+                text = clean(re.sub(r"<[^>]+>", " ", html[start:end]))
+                title_match = re.findall(r">\\s*([^<>]{8,120})\\s*<", html[start:match.start()])
+                title = clean(title_match[-1]) if title_match else "Oferta BNE"
+                match_score = score_job(text, title, terms, recent_terms)
+                found.append({
+                    "score": match_score, "compatibility": match_score,
+                    "title": title, "location": "Chile",
+                    "company": "", "description": summarize(text, 150),
+                    "functions": "Revisar funciones y requisitos en BNE.",
+                    "url": offer_url, "source": "Bolsa Nacional de Empleo (BNE)",
+                    "published_at": "Últimos 5 días",
+                })
+    except Exception:
+        errors.append("bne")
+
     unique, seen = [], set()
     for job in sorted(found, key=lambda x: x["score"], reverse=True):
         if job["url"] not in seen:
@@ -255,6 +299,6 @@ def jobs(item: SearchRequest):
     message = None if unique else "No encontramos ofertas compatibles con tu perfil en Chile publicadas durante los últimos 5 días."
     return {
         "jobs": unique, "total": len(unique), "page_size": 20, "market": "Chile",
-        "source": "Get on Board + Remote OK + Remotive + Himalayas + Jobicy + Arbeitnow", "message": message,
+        "source": "Get on Board + Remote OK + Remotive + Himalayas + Jobicy + Arbeitnow + BNE", "message": message,
         "source_errors": len(errors),
     }
