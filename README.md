@@ -1,16 +1,15 @@
-# PetuCV
+# PetuCV v1.2
+PetuCV reads a PDF CV locally, extracts professional keywords and searches public job feeds for matching opportunities.
 
-PetuCV compares an existing PDF CV with a public job-ad URL using a lightweight ATS-style keyword analysis.
+## User flow
+1. Upload PDF CV.
+2. Browser extracts CV text with PDF.js.
+3. Browser derives professional search terms without paid AI.
+4. PetuCV queries public job feeds and ranks results by term overlap.
+5. Up to 10 real job listings are displayed in a table: role, short description, main functions and job URL.
 
-## Flow
-1. User uploads a PDF CV.
-2. PDF.js extracts text locally in the browser; the CV file is not uploaded for analysis.
-3. User supplies a public job-ad URL.
-4. PetuCV attempts to retrieve visible HTML text from the job page. Sites that block automated retrieval require manual job-description paste.
-5. Browser computes keyword overlap, score, matches and missing terms.
+## Sources
+The MVP uses publicly accessible job feeds such as Arbeitnow and Remotive. Availability, geographic coverage and individual listings depend on those external sources.
 
 ## Cost architecture
-No paid AI API is used per analysis. PDF parsing and ATS comparison run client-side. The server only serves the app and retrieves publicly accessible job HTML.
-
-## Limitations
-Scanned/image-only PDFs need OCR and are not supported in this MVP. LinkedIn and other protected/dynamic job sites may prevent automatic URL extraction. ATS score is an estimate and does not reproduce any specific employer ATS.
+No paid AI API is used. The CV PDF stays in the browser; only selected search keywords are sent to the PetuCV backend.
