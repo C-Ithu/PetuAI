@@ -17,6 +17,24 @@ class GenerateRequest(BaseModel):
 def generate_public(item:GenerateRequest):
     try: output=engine.generate(item.prompt)
     except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc))
+    except Exception as exc:
+        message=str(exc)
+        low=message.lower()
+        if "hf_token_not_configured" in low:
+            detail="HF_TOKEN no está configurado en el servidor."
+        elif "401" in low or "unauthorized" in low or "authentication" in low:
+            detail="Hugging Face rechazó el token. Revisa HF_TOKEN y sus permisos de Inference Providers."
+        elif "403" in low or "gated" in low or "access" in low or "permission" in low:
+            detail="La cuenta de Hugging Face no tiene acceso al modelo. Acepta las condiciones de FLUX.1-schnell y revisa los permisos del token."
+        elif "402" in low or "credits" in low or "quota" in low or "billing" in low:
+            detail="La cuota gratuita de Hugging Face no está disponible o se agotó."
+        elif "429" in low or "rate limit" in low:
+            detail="Hugging Face alcanzó temporalmente el límite de solicitudes. Intenta nuevamente más tarde."
+        elif "503" in low or "timeout" in low or "unavailable" in low:
+            detail="El proveedor de generación está temporalmente no disponible. Intenta nuevamente."
+        else:
+            detail=f"Error de Hugging Face: {message[:300]}"
+        raise HTTPException(status_code=502,detail=detail)
     return Response(content=output,media_type="image/jpeg",headers={"Cache-Control":"no-store","X-PetuAI-Backend":engine.name})
 @app.post("/v1/generate",dependencies=[Depends(require_api_key)])
 def generate_api(item:GenerateRequest):
