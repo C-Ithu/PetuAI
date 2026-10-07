@@ -25,7 +25,22 @@ def get_json(url):
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.loads(r.read())
 
-def recent(date_value):\n    if not date_value:return False\n    try:\n        s=str(date_value).replace("Z","+00:00")\n        dt=datetime.fromisoformat(s)\n        if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)\n        return dt>=datetime.now(timezone.utc)-timedelta(days=21)\n    except Exception:return False\n\ndef summarize(text,limit):
+def recent(date_value):
+    if not date_value:
+        return False
+    try:
+        if isinstance(date_value,(int,float)):
+            dt=datetime.fromtimestamp(date_value,timezone.utc)
+        else:
+            s=str(date_value).replace("Z","+00:00")
+            dt=datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt=dt.replace(tzinfo=timezone.utc)
+        return dt>=datetime.now(timezone.utc)-timedelta(days=21)
+    except Exception:
+        return False
+
+def summarize(text,limit):
     text=clean(text)
     if not text:return ""
     parts=re.split(r"(?<=[.!?])\\s+",text)
@@ -50,6 +65,9 @@ def parse(row,terms,recent_terms):
     remote_modality=clean(a.get("remote_modality"))
     location=", ".join(countries) if countries else remote_modality or "Chile"
     url=links.get("public_url")
+    published=a.get("published_at") or a.get("created_at")
+    if not recent(published):
+        return None
     if not url:
         return None
     searchable=" ".join([title,description,functions,clean(a.get("desirable"))]).lower()
@@ -109,6 +127,9 @@ def jobs(item:SearchRequest):
             geo=(loc+" "+clean(str(r.get("tags") or []))).lower()
             if not any(x in geo for x in ("chile","latam","latin america")):
                 continue
+            published=r.get("date") or r.get("epoch")
+            if not recent(published):
+                continue
             searchable=" ".join([clean(r.get("position")),clean(r.get("description"))]).lower()
             gh=sum(1 for t in terms if t in searchable)
             rh=sum(1 for t in recent_terms if t in searchable)
@@ -125,6 +146,9 @@ def jobs(item:SearchRequest):
             loc=clean(r.get("candidate_required_location") or "")
             if not any(x in loc.lower() for x in ("chile","latam","latin america")):
                 continue
+            published=r.get("publication_date")
+            if not recent(published):
+                continue
             searchable=" ".join([clean(r.get("title")),clean(r.get("description")),clean(r.get("category"))]).lower()
             gh=sum(1 for t in terms if t in searchable)
             rh=sum(1 for t in recent_terms if t in searchable)
@@ -139,7 +163,6 @@ def jobs(item:SearchRequest):
         if j["url"] not in seen:
             seen.add(j["url"])
             unique.append(j)
-        if len(unique)==10: break
 
     message=None
     if not unique:
