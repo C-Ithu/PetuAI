@@ -1,15 +1,18 @@
-# PetuCV v1.2
-PetuCV reads a PDF CV locally, extracts professional keywords and searches public job feeds for matching opportunities.
+# PetuCV v1.3 — Chile
+PetuCV reads a PDF CV locally, extracts professional keywords and searches for matching job opportunities limited to Chile.
+
+## Scope
+This first market version only returns listings whose location indicates Chile/a Chilean city, or remote listings whose stated eligibility includes Latin America, South America, the Americas or worldwide availability compatible with candidates in Chile.
 
 ## User flow
 1. Upload PDF CV.
-2. Browser extracts CV text with PDF.js.
-3. Browser derives professional search terms without paid AI.
-4. PetuCV queries public job feeds and ranks results by term overlap.
-5. Up to 10 real job listings are displayed in a table: role, short description, main functions and job URL.
-
-## Sources
-The MVP uses publicly accessible job feeds such as Arbeitnow and Remotive. Availability, geographic coverage and individual listings depend on those external sources.
+2. PDF.js extracts CV text locally in the browser.
+3. PetuCV derives professional search terms without paid AI.
+4. Public job feeds are queried and non-Chile-compatible listings are discarded.
+5. Up to 10 matching jobs are shown with role, description, main functions and URL.
 
 ## Cost architecture
-No paid AI API is used. The CV PDF stays in the browser; only selected search keywords are sent to the PetuCV backend.
+No paid AI API is used. The PDF remains in the browser; only selected professional keywords are sent to the backend.
+
+## Coverage limitation
+Results depend on the geographic coverage of the public job feeds used by the MVP. PetuCV does not invent jobs when fewer than 10 compatible Chile listings are available.
