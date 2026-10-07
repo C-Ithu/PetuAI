@@ -1,17 +1,18 @@
-import base64, os
-class OpenAIImageGenerator:
-    name="openai-text-to-image"
+import os
+from io import BytesIO
+class FreeTierImageGenerator:
+    name="huggingface-flux-free-tier"
     def __init__(self):
-        from openai import OpenAI
-        self.client=OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        self.model=os.getenv("PETUAI_IMAGE_MODEL","gpt-image-2")
+        from huggingface_hub import InferenceClient
+        token=os.getenv("HF_TOKEN")
+        if not token: raise RuntimeError("HF_TOKEN is required")
+        self.model=os.getenv("PETUAI_IMAGE_MODEL","black-forest-labs/FLUX.1-schnell")
+        self.client=InferenceClient(provider="auto",api_key=token)
     def generate(self,prompt:str):
         prompt=" ".join((prompt or "").strip().split())
         if not prompt: raise ValueError("El prompt no puede estar vacío")
-        instruction=f"Create one original polished image from this request:\n{prompt}\nCreate a fresh composition. Do not add watermarks, logos, trademarks or text unless explicitly requested."
-        result=self.client.images.generate(model=self.model,prompt=instruction,size="1024x1024",quality="medium",output_format="jpeg",moderation="auto")
-        return base64.b64decode(result.data[0].b64_json)
-def build_engine():
-    if not os.getenv("OPENAI_API_KEY"): raise RuntimeError("OPENAI_API_KEY is required")
-    return OpenAIImageGenerator()
+        instruction=f"{prompt}. Original composition, polished image, no watermark."
+        image=self.client.text_to_image(instruction,model=self.model)
+        out=BytesIO(); image.convert("RGB").save(out,format="JPEG",quality=92); return out.getvalue()
+def build_engine(): return FreeTierImageGenerator()
 engine=build_engine()
