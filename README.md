@@ -1,24 +1,23 @@
-# PetuAI
-**Imagina. Crea.**
+# PetuCV
 
-## v1.2 — owner-hosted image generation
-PetuAI no longer depends on OpenAI or Hugging Face hosted inference.
+PetuCV is a zero-paid-AI-consumption MVP for creating CVs and estimating ATS keyword compatibility.
 
-Architecture: Browser -> PetuAI on Render -> secure public endpoint -> owner-hosted Stable Diffusion-compatible API -> image preview.
+## Features
+- CV form and live document preview.
+- Job-description keyword analysis in the browser.
+- Estimated ATS compatibility score.
+- Matching and missing keyword suggestions.
+- Local browser storage.
+- PDF export through the browser print/PDF function.
 
-Render variables:
-- PETUAI_LOCAL_IMAGE_API_URL
-- PETUAI_LOCAL_IMAGE_API_TOKEN
+## Cost architecture
+The CV builder, ATS analysis and document preparation run client-side. No OpenAI, Hugging Face or paid generative API is called per user action.
 
-The local engine must expose a compatible /sdapi/v1/txt2img endpoint. No paid image API or per-image cloud credits are required by PetuAI. The owner-hosted computer supplies the compute and electricity.
+## Deployment
+FastAPI serves the static application. Render only hosts the lightweight web service.
 
-Do not expose an unauthenticated image-generation API to the public internet.
-
-## Monetization roadmap
-A later release can provide a protected preview and use Mercado Pago to unlock the original download.
-
-## Rights
-PetuAI can request original compositions but cannot guarantee copyright status or absence of third-party rights in every output.
+## Disclaimer
+ATS scoring is an estimate based on textual keyword matching and does not guarantee performance in any particular applicant tracking system or hiring process.
 
 ## License
 Apache-2.0.
