@@ -1,6 +1,6 @@
+import base64, os
 from io import BytesIO
 from PIL import Image, ImageEnhance, ImageFilter
-
 class LocalEnhanceBackend:
     name="local-enhance-v0"
     def _load(self,data):
@@ -11,4 +11,18 @@ class LocalEnhanceBackend:
     def edit(self,data,instruction):
         if not instruction.strip(): raise ValueError("Instruction cannot be empty")
         return self.enhance(data)
-engine=LocalEnhanceBackend()
+class OpenAIImageBackend(LocalEnhanceBackend):
+    name="openai-image"
+    def __init__(self):
+        from openai import OpenAI
+        self.client=OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        self.model=os.getenv("PETUAI_IMAGE_MODEL","gpt-image-2.5-sunburst")
+    def edit(self,data,instruction):
+        if not instruction.strip(): raise ValueError("Instruction cannot be empty")
+        image=BytesIO(data); image.name="input.png"
+        result=self.client.images.edit(model=self.model,image=image,prompt=instruction,output_format="jpeg",quality="medium")
+        return base64.b64decode(result.data[0].b64_json)
+def build_engine():
+    if os.getenv("OPENAI_API_KEY"): return OpenAIImageBackend()
+    return LocalEnhanceBackend()
+engine=build_engine()
