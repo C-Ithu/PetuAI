@@ -1,14 +1,25 @@
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from pydantic import BaseModel, Field
 from .security import require_api_key, require_owner
 from .engine import engine
 from .store import feedback_store, model_registry
 
-app = FastAPI(title="PetuAI API", version="0.1.0", description="Adaptive Image Intelligence for developers")
+app = FastAPI(title="PetuAI API", version="0.2.0", description="Adaptive Image Intelligence for developers")
+WEB = Path(__file__).parent / "web" / "index.html"
+
+@app.get("/", include_in_schema=False)
+def web_app(): return FileResponse(WEB)
 
 @app.get("/health")
-def health(): return {"status":"ok","service":"PetuAI","version":"0.1.0"}
+def health(): return {"status":"ok","service":"PetuAI","version":"0.2.0"}
+
+@app.post("/demo/edit", include_in_schema=False)
+async def demo_edit(image: UploadFile=File(...), instruction: str=Form(...)):
+    try: output=engine.edit(await image.read(), instruction)
+    except ValueError as exc: raise HTTPException(status_code=400, detail=str(exc))
+    return Response(content=output, media_type="image/jpeg", headers={"X-PetuAI-Backend":engine.name})
 
 @app.post("/v1/edit", dependencies=[Depends(require_api_key)])
 async def edit(image: UploadFile=File(...), instruction: str=Form(...)):
