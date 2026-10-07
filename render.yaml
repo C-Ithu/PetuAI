@@ -9,7 +9,7 @@ services:
         generateValue: true
       - key: PETUAI_OWNER_KEY
         generateValue: true
-      - key: OPENAI_API_KEY
+      - key: HF_TOKEN
         sync: false
       - key: PETUAI_IMAGE_MODEL
-        value: gpt-image-2
+        value: black-forest-labs/FLUX.1-schnell
