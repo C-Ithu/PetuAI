@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="PetuCV", version="2.0.2")
+app = FastAPI(title="PetuCV", version="2.1.0")
 WEB = Path(__file__).parent / "web" / "index.html"
 
 @app.get("/", include_in_schema=False)
@@ -17,7 +17,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PetuCV", "version": "2.0.2"}
+    return {"status": "ok", "service": "PetuCV", "version": "2.1.0"}
 
 class SearchRequest(BaseModel):
     keywords: list[str] = Field(min_length=1, max_length=20)
@@ -27,7 +27,7 @@ def clean(value):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 def get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.0.2", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.1.0", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read())
 
@@ -65,11 +65,21 @@ def summarize(value, limit):
 def score_job(searchable, title, terms, recent_terms):
     searchable = searchable.lower()
     title = title.lower()
-    return (
-        sum(1 for term in terms if term in searchable)
-        + 3 * sum(1 for term in recent_terms if term in searchable)
-        + 2 * sum(1 for term in recent_terms if term in title)
-    )
+    all_terms = list(dict.fromkeys(terms))
+    recent = list(dict.fromkeys(recent_terms))
+    if not all_terms:
+        return 0
+    whole_hits = sum(1 for term in all_terms if term in searchable)
+    recent_hits = sum(1 for term in recent if term in searchable)
+    title_hits = sum(1 for term in recent if term in title)
+    role_terms = ("project manager","jefe de proyecto","pmo","scrum","product manager","sap","software","devops")
+    role_hits = sum(1 for term in role_terms if term in all_terms and term in searchable)
+    raw = (whole_hits / len(all_terms)) * 45
+    if recent:
+        raw += (recent_hits / len(recent)) * 30
+        raw += (title_hits / len(recent)) * 15
+    raw += min(role_hits * 5, 10)
+    return min(100, round(raw))
 
 def parse_getonbrd(row, terms, recent_terms):
     attrs = row.get("attributes") or {}
@@ -87,7 +97,7 @@ def parse_getonbrd(row, terms, recent_terms):
     location = ", ".join(countries) or clean(attrs.get("remote_modality")) or "Chile"
     searchable = " ".join([title, description, functions, clean(attrs.get("desirable"))])
     return {
-        "score": score_job(searchable, title, terms, recent_terms),
+        "score": score_job(searchable, title, terms, recent_terms),\n        "compatibility": score_job(searchable, title, terms, recent_terms),
         "title": title,
         "location": location,
         "company": "",
@@ -143,7 +153,7 @@ def jobs(item: SearchRequest):
             title = clean(row.get("position") or "Empleo remoto")
             description = clean(row.get("description"))
             found.append({
-                "score": score_job(title + " " + description, title, terms, recent_terms),
+                "score": score_job(title + " " + description, title, terms, recent_terms),\n                "compatibility": score_job(title + " " + description, title, terms, recent_terms),
                 "title": title, "location": location or "LATAM / Chile compatible",
                 "company": clean(row.get("company")), "description": summarize(description, 150),
                 "functions": "Revisar funciones en el aviso.", "url": url,
@@ -176,6 +186,66 @@ def jobs(item: SearchRequest):
     except Exception:
         errors.append("remotive")
 
+    try:
+        data = get_json("https://himalayas.app/jobs/api/search?country=CL&sort=recent&page=1")
+        rows = data.get("jobs") or data.get("data") or []
+        for row in rows:
+            published = row.get("pubDate")
+            if not is_recent(published):
+                continue
+            restrictions = clean(row.get("locationRestrictions"))
+            location = restrictions or "Remoto compatible con Chile"
+            url = row.get("applicationLink")
+            if not url:
+                continue
+            title = clean(row.get("title") or "Empleo remoto")
+            description = clean(row.get("description") or row.get("excerpt"))
+            searchable = " ".join([title, description, clean(row.get("category")), clean(row.get("parentCategories"))])
+            match = score_job(searchable, title, terms, recent_terms)
+            found.append({"score":match,"compatibility":match,"title":title,"location":location,"company":clean(row.get("companyName")),"description":summarize(description,150),"functions":"Revisar funciones en el aviso.","url":url,"source":"Himalayas","published_at":str(published)})
+    except Exception:
+        errors.append("himalayas")
+
+    try:
+        data = get_json("https://jobicy.com/api/v2/remote-jobs?geo=latam&count=200")
+        for row in data.get("jobs", []):
+            published = row.get("pubDate")
+            if not is_recent(published):
+                continue
+            url = row.get("url")
+            if not url:
+                continue
+            title = clean(row.get("jobTitle") or "Empleo remoto")
+            description = clean(row.get("jobDescription") or row.get("jobExcerpt"))
+            location = clean(row.get("jobGeo")) or "LATAM / Chile compatible"
+            searchable = " ".join([title,description,clean(row.get("jobIndustry")),clean(row.get("jobType"))])
+            match = score_job(searchable,title,terms,recent_terms)
+            found.append({"score":match,"compatibility":match,"title":title,"location":location,"company":clean(row.get("companyName")),"description":summarize(description,150),"functions":"Revisar funciones en el aviso.","url":url,"source":"Jobicy","published_at":str(published)})
+    except Exception:
+        errors.append("jobicy")
+
+    try:
+        for page in (1, 2):
+            data = get_json(f"https://www.arbeitnow.com/api/job-board-api?page={page}")
+            for row in data.get("data", []):
+                published = row.get("created_at")
+                if not is_recent(published):
+                    continue
+                location = clean(row.get("location"))
+                geo = (location + " " + clean(row.get("tags"))).lower()
+                if not (row.get("remote") and any(x in geo for x in ("chile","latam","latin america","worldwide","remote"))):
+                    continue
+                url = row.get("url")
+                if not url:
+                    continue
+                title = clean(row.get("title") or "Empleo")
+                description = clean(row.get("description"))
+                searchable = " ".join([title,description,clean(row.get("tags")),clean(row.get("job_types"))])
+                match = score_job(searchable,title,terms,recent_terms)
+                found.append({"score":match,"compatibility":match,"title":title,"location":location or "Remoto","company":clean(row.get("company_name")),"description":summarize(description,150),"functions":"Revisar funciones en el aviso.","url":url,"source":"Arbeitnow","published_at":str(published)})
+    except Exception:
+        errors.append("arbeitnow")
+
     unique, seen = [], set()
     for job in sorted(found, key=lambda x: x["score"], reverse=True):
         if job["url"] not in seen:
@@ -185,6 +255,6 @@ def jobs(item: SearchRequest):
     message = None if unique else "No encontramos ofertas compatibles con tu perfil en Chile publicadas durante los últimos 5 días."
     return {
         "jobs": unique, "total": len(unique), "page_size": 20, "market": "Chile",
-        "source": "Get on Board + Remote OK + Remotive", "message": message,
+        "source": "Get on Board + Remote OK + Remotive + Himalayas + Jobicy + Arbeitnow", "message": message,
         "source_errors": len(errors),
     }
