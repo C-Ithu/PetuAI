@@ -1,15 +1,6 @@
 services:
   - type: web
-    name: petuai
+    name: petucv
     runtime: docker
     plan: free
     healthCheckPath: /health
-    envVars:
-      - key: PETUAI_API_KEY
-        generateValue: true
-      - key: PETUAI_OWNER_KEY
-        generateValue: true
-      - key: PETUAI_LOCAL_IMAGE_API_URL
-        sync: false
-      - key: PETUAI_LOCAL_IMAGE_API_TOKEN
-        sync: false
