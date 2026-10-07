@@ -4,23 +4,24 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
 
-app=FastAPI(title="PetuCV",version="1.7.0",description="Chile CV matching with Get on Board public API")
+app=FastAPI(title="PetuCV",version="1.8.0",description="Chile CV matching with Get on Board public API")
 WEB=Path(__file__).parent/"web"/"index.html"
 
 @app.get("/",include_in_schema=False)
 def home(): return FileResponse(WEB)
 
 @app.get("/health")
-def health(): return {"status":"ok","service":"PetuCV","version":"1.7.0"}
+def health(): return {"status":"ok","service":"PetuCV","version":"1.8.0"}
 
 class SearchRequest(BaseModel):
-    keywords:list[str]=Field(min_length=1,max_length=12)
+    keywords:list[str]=Field(min_length=1,max_length=20)
+    recent_keywords:list[str]=Field(default_factory=list,max_length=12)
 
 def clean(s):
     return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",str(s or ""))).strip()
 
 def get_json(url):
-    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.7","Accept":"application/json"})
+    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.8","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.loads(r.read())
 
@@ -39,7 +40,7 @@ def summarize(text,limit):
     if not out:out=text[:limit].rsplit(" ",1)[0]
     return out.rstrip(" .")+"."
 
-def parse(row,terms):
+def parse(row,terms,recent_terms):
     a=row.get("attributes") or {}
     links=row.get("links") or {}
     title=clean(a.get("title") or "Empleo")
@@ -52,7 +53,10 @@ def parse(row,terms):
     if not url:
         return None
     searchable=" ".join([title,description,functions,clean(a.get("desirable"))]).lower()
-    score=sum(1 for t in terms if t.lower() in searchable)
+    global_hits=sum(1 for t in terms if t.lower() in searchable)
+    recent_hits=sum(1 for t in recent_terms if t.lower() in searchable)
+    title_hits=sum(1 for t in recent_terms if t.lower() in title.lower())
+    score=global_hits+(recent_hits*3)+(title_hits*2)
     return {
         "score":score,
         "title":title,
@@ -66,6 +70,7 @@ def parse(row,terms):
 @app.post("/jobs")
 def jobs(item:SearchRequest):
     terms=[x.strip().lower() for x in item.keywords if x.strip()]
+    recent_terms=[x.strip().lower() for x in item.recent_keywords if x.strip()]
     found=[]
     errors=[]
     try:
@@ -90,7 +95,7 @@ def jobs(item:SearchRequest):
             url=f"https://www.getonbrd.com/api/v0/categories/{category_id}/jobs?country_code=cl&per_page=120"
             data=get_json(url)
             for row in data.get("data",[]):
-                j=parse(row,terms)
+                j=parse(row,terms,recent_terms)
                 if j: found.append(j)
         except Exception:
             errors.append(str(category_id))
