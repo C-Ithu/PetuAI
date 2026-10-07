@@ -19,7 +19,7 @@ def health(): return {"status":"ok","service":"PetuAI","version":"0.2.0"}
 async def demo_edit(image: UploadFile=File(...), instruction: str=Form(...)):
     try: output=engine.edit(await image.read(), instruction)
     except ValueError as exc: raise HTTPException(status_code=400, detail=str(exc))
-    return Response(content=output, media_type="image/jpeg", headers={"X-PetuAI-Backend":engine.name})
+    return Response(content=output, media_type="image/jpeg")
 
 @app.post("/v1/edit", dependencies=[Depends(require_api_key)])
 async def edit(image: UploadFile=File(...), instruction: str=Form(...)):
