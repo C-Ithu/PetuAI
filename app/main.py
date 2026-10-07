@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="PetuCV", version="2.0.1")
+app = FastAPI(title="PetuCV", version="2.0.2")
 WEB = Path(__file__).parent / "web" / "index.html"
 
 @app.get("/", include_in_schema=False)
@@ -17,7 +17,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PetuCV", "version": "2.0.1"}
+    return {"status": "ok", "service": "PetuCV", "version": "2.0.2"}
 
 class SearchRequest(BaseModel):
     keywords: list[str] = Field(min_length=1, max_length=20)
@@ -27,7 +27,7 @@ def clean(value):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 def get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.0.1", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.0.2", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read())
 
@@ -41,7 +41,7 @@ def is_recent(value):
             dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-        return dt >= datetime.now(timezone.utc) - timedelta(days=21)
+        return dt >= datetime.now(timezone.utc) - timedelta(days=5)
     except (ValueError, TypeError, OSError):
         return False
 
@@ -182,7 +182,7 @@ def jobs(item: SearchRequest):
             seen.add(job["url"])
             unique.append(job)
 
-    message = None if unique else "No encontramos ofertas compatibles con tu perfil en Chile publicadas durante los últimos 21 días."
+    message = None if unique else "No encontramos ofertas compatibles con tu perfil en Chile publicadas durante los últimos 5 días."
     return {
         "jobs": unique, "total": len(unique), "page_size": 20, "market": "Chile",
         "source": "Get on Board + Remote OK + Remotive", "message": message,
