@@ -4,14 +4,14 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
 
-app=FastAPI(title="PetuCV",version="1.8.0",description="Chile CV matching with Get on Board public API")
+app=FastAPI(title="PetuCV",version="1.9.0",description="Chile CV matching with Get on Board public API")
 WEB=Path(__file__).parent/"web"/"index.html"
 
 @app.get("/",include_in_schema=False)
 def home(): return FileResponse(WEB)
 
 @app.get("/health")
-def health(): return {"status":"ok","service":"PetuCV","version":"1.8.0"}
+def health(): return {"status":"ok","service":"PetuCV","version":"1.9.0"}
 
 class SearchRequest(BaseModel):
     keywords:list[str]=Field(min_length=1,max_length=20)
@@ -21,7 +21,7 @@ def clean(s):
     return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",str(s or ""))).strip()
 
 def get_json(url):
-    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.8","Accept":"application/json"})
+    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.9","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.loads(r.read())
 
@@ -100,7 +100,7 @@ def jobs(item:SearchRequest):
         except Exception:
             errors.append(str(category_id))
 
-    unique=[]; seen=set()
+    # Remote OK: include only Chile/LATAM-compatible remote jobs.\n    try:\n        data=get_json("https://remoteok.com/api")\n        for r in data[1:] if isinstance(data,list) else []:\n            blob=clean(str(r)); loc=clean(r.get("location") or "")\n            geo=(loc+" "+blob).lower()\n            if not any(x in geo for x in ("chile","latam","latin america")): continue\n            searchable=" ".join([clean(r.get("position")),clean(r.get("description"))]).lower()\n            gh=sum(1 for t in terms if t in searchable); rh=sum(1 for t in recent_terms if t in searchable)\n            found.append({"score":gh+rh*3,"title":clean(r.get("position") or "Empleo remoto"),"location":loc or "LATAM / Chile compatible","company":clean(r.get("company")),"description":summarize(r.get("description"),150),"functions":"Revisar funciones en el aviso.","url":r.get("url") or r.get("apply_url"),"source":"Remote OK"})\n    except Exception:\n        errors.append("remoteok")\n\n    # Remotive public API: Chile/LATAM-compatible remote jobs only.\n    try:\n        data=get_json("https://remotive.com/api/remote-jobs")\n        for r in data.get("jobs",[]):\n            loc=clean(r.get("candidate_required_location") or "")\n            geo=loc.lower()\n            if not any(x in geo for x in ("chile","latam","latin america")): continue\n            searchable=" ".join([clean(r.get("title")),clean(r.get("description")),clean(r.get("category"))]).lower()\n            gh=sum(1 for t in terms if t in searchable); rh=sum(1 for t in recent_terms if t in searchable)\n            found.append({"score":gh+rh*3,"title":clean(r.get("title") or "Empleo remoto"),"location":loc or "LATAM / Chile compatible","company":clean(r.get("company_name")),"description":summarize(r.get("description"),150),"functions":"Revisar funciones en el aviso.","url":r.get("url"),"source":"Remotive"})\n    except Exception:\n        errors.append("remotive")\n\n    unique=[]; seen=set()
     for j in sorted(found,key=lambda x:x["score"],reverse=True):
         if j["url"] not in seen:
             seen.add(j["url"])
@@ -110,4 +110,4 @@ def jobs(item:SearchRequest):
     message=None
     if not unique:
         message="No encontramos ofertas compatibles con tu perfil en Chile en este momento. Puedes intentar nuevamente más tarde."
-    return {"jobs":unique,"market":"Chile","source":"Get on Board","message":message,"source_errors":len(errors)}
+    return {"jobs":unique,"market":"Chile","source":"Get on Board + Remote OK + Remotive","message":message,"source_errors":len(errors)}
