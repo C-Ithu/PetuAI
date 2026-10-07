@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: petuai
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PETUAI_API_KEY
+        generateValue: true
+      - key: PETUAI_OWNER_KEY
+        generateValue: true
