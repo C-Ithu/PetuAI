@@ -1,6 +1,11 @@
-# PetuCV v1.3.1 — Chile estricto
-This version only accepts job listings whose structured location field explicitly contains Chile or a Chilean city. Generic Worldwide, Americas, Latin America, Anywhere and Remote-only listings are excluded.
+# PetuCV v1.4 — Chile
+PetuCV now uses the public Get on Board job API as its primary job source. The public API requires no paid AI service or private API key for published job data.
 
-The results table displays the job location so users can verify the Chile-only rule. Up to 10 real matching listings are returned; if the current public sources contain fewer, PetuCV shows fewer rather than inserting international jobs.
+## Flow
+- PDF CV is read locally with PDF.js.
+- Professional terms are extracted in the browser.
+- PetuCV searches Get on Board's public job search endpoint using several of those terms.
+- Only records whose returned data explicitly references Chile or a Chilean city are retained.
+- Up to 10 unique matches are shown with role, location, description, functions and job URL.
 
-No paid AI API is used. PDF processing remains in the browser.
+No international fallback is used in this Chile-first MVP.
