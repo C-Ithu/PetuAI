@@ -1,17 +1,17 @@
 from pathlib import Path
-import json,re,urllib.request
+import json,re,urllib.request\nfrom datetime import datetime,timezone,timedelta
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
 
-app=FastAPI(title="PetuCV",version="1.9.1",description="Chile CV matching with Get on Board public API")
+app=FastAPI(title="PetuCV",version="2.0.0",description="Chile CV matching with Get on Board public API")
 WEB=Path(__file__).parent/"web"/"index.html"
 
 @app.get("/",include_in_schema=False)
 def home(): return FileResponse(WEB)
 
 @app.get("/health")
-def health(): return {"status":"ok","service":"PetuCV","version":"1.9.1"}
+def health(): return {"status":"ok","service":"PetuCV","version":"2.0.0"}
 
 class SearchRequest(BaseModel):
     keywords:list[str]=Field(min_length=1,max_length=20)
@@ -21,11 +21,11 @@ def clean(s):
     return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",str(s or ""))).strip()
 
 def get_json(url):
-    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.9.1","Accept":"application/json"})
+    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/2.0","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.loads(r.read())
 
-def summarize(text,limit):
+def recent(date_value):\n    if not date_value:return False\n    try:\n        s=str(date_value).replace("Z","+00:00")\n        dt=datetime.fromisoformat(s)\n        if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)\n        return dt>=datetime.now(timezone.utc)-timedelta(days=21)\n    except Exception:return False\n\ndef summarize(text,limit):
     text=clean(text)
     if not text:return ""
     parts=re.split(r"(?<=[.!?])\\s+",text)
@@ -114,7 +114,7 @@ def jobs(item:SearchRequest):
             rh=sum(1 for t in recent_terms if t in searchable)
             job_url=r.get("url") or r.get("apply_url")
             if job_url:
-                found.append({"score":gh+rh*3,"title":clean(r.get("position") or "Empleo remoto"),"location":loc or "LATAM / Chile compatible","company":clean(r.get("company")),"description":summarize(r.get("description"),150),"functions":"Revisar funciones en el aviso.","url":job_url,"source":"Remote OK"})
+                found.append({"score":gh+rh*3,"title":clean(r.get("position") or "Empleo remoto"),"location":loc or "LATAM / Chile compatible","company":clean(r.get("company")),"description":summarize(r.get("description"),150),"functions":"Revisar funciones en el aviso.","url":job_url,"source":"Remote OK","published_at":str(published)})
     except Exception:
         errors.append("remoteok")
 
@@ -130,7 +130,7 @@ def jobs(item:SearchRequest):
             rh=sum(1 for t in recent_terms if t in searchable)
             job_url=r.get("url")
             if job_url:
-                found.append({"score":gh+rh*3,"title":clean(r.get("title") or "Empleo remoto"),"location":loc or "LATAM / Chile compatible","company":clean(r.get("company_name")),"description":summarize(r.get("description"),150),"functions":"Revisar funciones en el aviso.","url":job_url,"source":"Remotive"})
+                found.append({"score":gh+rh*3,"title":clean(r.get("title") or "Empleo remoto"),"location":loc or "LATAM / Chile compatible","company":clean(r.get("company_name")),"description":summarize(r.get("description"),150),"functions":"Revisar funciones en el aviso.","url":job_url,"source":"Remotive","published_at":str(published)})
     except Exception:
         errors.append("remotive")
 
@@ -144,4 +144,4 @@ def jobs(item:SearchRequest):
     message=None
     if not unique:
         message="No encontramos ofertas compatibles con tu perfil en Chile en este momento. Puedes intentar nuevamente más tarde."
-    return {"jobs":unique,"market":"Chile","source":"Get on Board + Remote OK + Remotive","message":message,"source_errors":len(errors)}
+    return {"jobs":unique,"total":len(unique),"page_size":20,"market":"Chile","source":"Get on Board + Remote OK + Remotive","message":message,"source_errors":len(errors)}
