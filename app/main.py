@@ -51,5 +51,5 @@ def jobs(item:SearchRequest):
         if j["url"] not in seen:
             seen.add(j["url"]);unique.append(j)
         if len(unique)==10:break
-    if not unique:raise HTTPException(503,"La fuente no devolvió avisos chilenos en las categorías consultadas. Intenta nuevamente más tarde.")
+    if not unique:return {"jobs":[],"market":"Chile","source":"Get on Board category feeds","message":"No encontramos ofertas compatibles con tu perfil en Chile en este momento. Las ofertas disponibles cambian constantemente, por lo que puedes intentar nuevamente más tarde."}
     return {"jobs":unique,"market":"Chile","source":"Get on Board category feeds"}
