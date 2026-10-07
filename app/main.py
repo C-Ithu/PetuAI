@@ -1,55 +1,93 @@
 from pathlib import Path
 import json,re,urllib.request
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
-app=FastAPI(title="PetuCV",version="1.6.0",description="Chile CV matching from job category feeds")
+
+app=FastAPI(title="PetuCV",version="1.7.0",description="Chile CV matching with Get on Board public API")
 WEB=Path(__file__).parent/"web"/"index.html"
+
 @app.get("/",include_in_schema=False)
-def home():return FileResponse(WEB)
+def home(): return FileResponse(WEB)
+
 @app.get("/health")
-def health():return {"status":"ok","service":"PetuCV","version":"1.6.0"}
-class SearchRequest(BaseModel):keywords:list[str]=Field(min_length=1,max_length=12)
-def flat(v):
-    if isinstance(v,str):return v
-    if isinstance(v,dict):return " ".join(flat(x) for x in v.values())
-    if isinstance(v,list):return " ".join(flat(x) for x in v)
-    return str(v or "")
-def clean(s):return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",str(s or ""))).strip()
-def chile(blob):
-    s=blob.lower()
-    return any(x in s for x in ("chile","santiago","valparaiso","valparaíso","concepcion","concepción","antofagasta","temuco","rancagua","puerto montt","la serena","remote (chile)"))
+def health(): return {"status":"ok","service":"PetuCV","version":"1.7.0"}
+
+class SearchRequest(BaseModel):
+    keywords:list[str]=Field(min_length=1,max_length=12)
+
+def clean(s):
+    return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",str(s or ""))).strip()
+
+def get_json(url):
+    req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.7","Accept":"application/json"})
+    with urllib.request.urlopen(req,timeout=20) as r:
+        return json.loads(r.read())
+
 def parse(row,terms):
-    a=row.get("attributes",row); blob=flat(a)
-    if not chile(blob):return None
-    low=blob.lower(); score=sum(1 for t in terms if t.lower() in low)
-    title=clean(a.get("title") or a.get("name") or "Empleo")
-    desc=clean(a.get("description") or a.get("description_headline") or blob)
-    url=a.get("public_url") or a.get("url")
-    if not url and a.get("slug"):url="https://www.getonbrd.com/jobs/"+str(a["slug"])
-    if not url:return None
-    loc=clean(a.get("location") or a.get("remote_modality") or "Chile")
-    company=clean(a.get("company_name") or flat(a.get("company","")))
-    return {"score":score,"title":title,"location":loc[:120] or "Chile","company":company[:100],"description":desc[:240],"functions":desc[240:600] or "Revisar detalle completo del aviso.","url":url}
+    a=row.get("attributes") or {}
+    links=row.get("links") or {}
+    title=clean(a.get("title") or "Empleo")
+    description=clean(a.get("description") or a.get("description_headline") or "")
+    functions=clean(a.get("functions") or a.get("projects") or "")
+    countries=[str(x) for x in (a.get("countries") or [])]
+    remote_modality=clean(a.get("remote_modality"))
+    location=", ".join(countries) if countries else remote_modality or "Chile"
+    url=links.get("public_url")
+    if not url:
+        return None
+    searchable=" ".join([title,description,functions,clean(a.get("desirable"))]).lower()
+    score=sum(1 for t in terms if t.lower() in searchable)
+    return {
+        "score":score,
+        "title":title,
+        "location":location,
+        "company":"",
+        "description":description[:260],
+        "functions":functions[:420] or "Revisar funciones en el aviso.",
+        "url":url
+    }
+
 @app.post("/jobs")
 def jobs(item:SearchRequest):
     terms=[x.strip().lower() for x in item.keywords if x.strip()]
-    categories=("programming","operations-management","product-management","machine-learning-ai","data-science-analytics","sysadmin-devops-qa","customer-support")
     found=[]
+    errors=[]
+    try:
+        cats=get_json("https://www.getonbrd.com/api/v0/categories?per_page=120")
+        categories=cats.get("data",[])
+    except Exception as e:
+        categories=[]
+        errors.append("categories")
+
+    preferred=("program","product","operation","data","sysadmin","devops","machine","agil","project")
+    selected=[]
     for cat in categories:
-        for page in (1,2,3):
-            try:
-                url=f"https://www.getonbrd.com/api/v0/categories/{cat}/jobs?page={page}&expand[]=company"
-                req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.6","Accept":"application/json"})
-                with urllib.request.urlopen(req,timeout=15) as r:data=json.loads(r.read())
-                for row in data.get("data",[]):
-                    j=parse(row,terms)
-                    if j:found.append(j)
-            except Exception:continue
-    unique=[];seen=set()
-    for j in sorted(found,key=lambda x:(x["score"],"chile" in x["location"].lower(),"santiago" in x["location"].lower()),reverse=True):
+        a=cat.get("attributes") or {}
+        label=(str(a.get("name",""))+" "+str(a.get("dimension",""))).lower()
+        if any(p in label for p in preferred):
+            selected.append(cat.get("id"))
+    if not selected:
+        selected=[cat.get("id") for cat in categories[:10] if cat.get("id")]
+
+    for category_id in selected:
+        try:
+            url=f"https://www.getonbrd.com/api/v0/categories/{category_id}/jobs?country_code=cl&per_page=120"
+            data=get_json(url)
+            for row in data.get("data",[]):
+                j=parse(row,terms)
+                if j: found.append(j)
+        except Exception:
+            errors.append(str(category_id))
+
+    unique=[]; seen=set()
+    for j in sorted(found,key=lambda x:x["score"],reverse=True):
         if j["url"] not in seen:
-            seen.add(j["url"]);unique.append(j)
-        if len(unique)==10:break
-    if not unique:return {"jobs":[],"market":"Chile","source":"Get on Board category feeds","message":"No encontramos ofertas compatibles con tu perfil en Chile en este momento. Las ofertas disponibles cambian constantemente, por lo que puedes intentar nuevamente más tarde."}
-    return {"jobs":unique,"market":"Chile","source":"Get on Board category feeds"}
+            seen.add(j["url"])
+            unique.append(j)
+        if len(unique)==10: break
+
+    message=None
+    if not unique:
+        message="No encontramos ofertas compatibles con tu perfil en Chile en este momento. Puedes intentar nuevamente más tarde."
+    return {"jobs":unique,"market":"Chile","source":"Get on Board","message":message,"source_errors":len(errors)}
