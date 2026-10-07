@@ -1,53 +1,56 @@
 from pathlib import Path
-from urllib.parse import urlparse
-import ipaddress, socket, urllib.request
-from html.parser import HTMLParser
+import json, re, urllib.request, urllib.parse
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field
 
-app=FastAPI(title="PetuCV",version="1.1.0",description="PDF CV and job URL ATS comparison")
+app=FastAPI(title="PetuCV",version="1.2.0",description="PDF CV to matching jobs")
 WEB=Path(__file__).parent/"web"/"index.html"
-
 @app.get("/",include_in_schema=False)
 def web_app(): return FileResponse(WEB)
 @app.get("/health")
-def health(): return {"status":"ok","service":"PetuCV","version":"1.1.0","product":"pdf-url-ats"}
+def health(): return {"status":"ok","service":"PetuCV","version":"1.2.0","product":"cv-job-matching"}
 
-class JobURL(BaseModel): url: HttpUrl
-class TextExtractor(HTMLParser):
-    def __init__(self): super().__init__(); self.parts=[]; self.skip=0
-    def handle_starttag(self,tag,attrs):
-        if tag in ("script","style","noscript","svg"): self.skip+=1
-    def handle_endtag(self,tag):
-        if tag in ("script","style","noscript","svg") and self.skip: self.skip-=1
-    def handle_data(self,data):
-        if not self.skip and data.strip(): self.parts.append(data.strip())
+class SearchRequest(BaseModel):
+    keywords:list[str]=Field(min_length=1,max_length=12)
 
-def public_host(host):
+def clean_html(s):
+    s=re.sub(r"<[^>]+>"," ",s or "")
+    return re.sub(r"\s+"," ",s).strip()
+
+@app.post("/jobs")
+def jobs(item:SearchRequest):
+    terms=[re.sub(r"[^\w+#. -]","",x).strip() for x in item.keywords if x.strip()]
+    query=" ".join(terms[:5])
+    found=[]
+    # Arbeitnow public job API: no paid AI/API key.
     try:
-        for info in socket.getaddrinfo(host,None):
-            ip=ipaddress.ip_address(info[4][0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved: return False
-        return True
-    except Exception: return False
-
-@app.post("/job-text")
-def job_text(item:JobURL):
-    url=str(item.url); p=urlparse(url)
-    if p.scheme not in ("http","https") or not p.hostname or not public_host(p.hostname):
-        raise HTTPException(400,"URL no permitida.")
-    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 PetuCV/1.1","Accept":"text/html"})
+        url="https://www.arbeitnow.com/api/job-board-api"
+        req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.2"})
+        with urllib.request.urlopen(req,timeout=15) as r: data=json.loads(r.read())
+        for j in data.get("data",[]):
+            text=" ".join([j.get("title",""),j.get("description","")," ".join(j.get("tags") or [])]).lower()
+            score=sum(1 for t in terms if t.lower() in text)
+            if score:
+                desc=clean_html(j.get("description",""))
+                found.append({"score":score,"title":j.get("title") or "Empleo","description":desc[:220],"functions":desc[220:520] or ", ".join(j.get("tags") or [])[:300],"url":j.get("url"),"company":j.get("company_name",""),"location":j.get("location","")})
+    except Exception: pass
+    # Remotive public API as second source.
     try:
-        with urllib.request.urlopen(req,timeout=12) as res:
-            if "text/html" not in res.headers.get("Content-Type",""):
-                raise HTTPException(400,"La URL no corresponde a una página HTML.")
-            raw=res.read(2_000_000).decode("utf-8","ignore")
-    except HTTPException: raise
-    except Exception:
-        raise HTTPException(422,"El portal bloqueó o impidió leer el aviso automáticamente. Pega la descripción del cargo manualmente.")
-    parser=TextExtractor(); parser.feed(raw)
-    text=" ".join(parser.parts)
-    if len(text)<150:
-        raise HTTPException(422,"No fue posible extraer suficiente texto del aviso. Pega la descripción manualmente.")
-    return {"text":text[:100000],"source":p.hostname}
+        url="https://remotive.com/api/remote-jobs?search="+urllib.parse.quote(query)
+        req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.2"})
+        with urllib.request.urlopen(req,timeout=15) as r: data=json.loads(r.read())
+        for j in data.get("jobs",[]):
+            desc=clean_html(j.get("description",""))
+            text=" ".join([j.get("title",""),desc,j.get("category","")]).lower()
+            score=sum(1 for t in terms if t.lower() in text)
+            if score:
+                found.append({"score":score,"title":j.get("title") or "Empleo","description":desc[:220],"functions":desc[220:520],"url":j.get("url"),"company":j.get("company_name",""),"location":j.get("candidate_required_location","Remote")})
+    except Exception: pass
+    unique=[]; seen=set()
+    for j in sorted(found,key=lambda x:x["score"],reverse=True):
+        key=(j["title"],j["url"])
+        if key not in seen and j["url"]: seen.add(key); unique.append(j)
+        if len(unique)==10: break
+    if not unique: raise HTTPException(503,"No encontramos avisos compatibles en las fuentes disponibles en este momento.")
+    return {"jobs":unique,"query":query}
