@@ -1,28 +1,24 @@
 # PetuAI
 **Imagina. Crea.**
 
-PetuAI is a text-to-image application using an open image model through Hugging Face Inference Providers.
+## v1.2 — owner-hosted image generation
+PetuAI no longer depends on OpenAI or Hugging Face hosted inference.
 
-## v1.1 architecture
-Prompt -> PetuAI -> Hugging Face Inference -> FLUX.1-schnell -> preview.
+Architecture: Browser -> PetuAI on Render -> secure public endpoint -> owner-hosted Stable Diffusion-compatible API -> image preview.
 
-OpenAI and OPENAI_API_KEY are no longer required. The default model is `black-forest-labs/FLUX.1-schnell`.
+Render variables:
+- PETUAI_LOCAL_IMAGE_API_URL
+- PETUAI_LOCAL_IMAGE_API_TOKEN
 
-Hugging Face Free accounts include a limited monthly inference credit. PetuAI does not enable paid usage automatically; free cloud inference is quota-limited and is not unlimited compute.
+The local engine must expose a compatible /sdapi/v1/txt2img endpoint. No paid image API or per-image cloud credits are required by PetuAI. The owner-hosted computer supplies the compute and electricity.
 
-## Environment
-```
-HF_TOKEN=...
-PETUAI_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell
-```
-
-The Hugging Face token needs inference permissions and must remain server-side.
+Do not expose an unauthenticated image-generation API to the public internet.
 
 ## Monetization roadmap
-Generation/preview is the validation experience. A later release can use Mercado Pago to unlock downloads.
+A later release can provide a protected preview and use Mercado Pago to unlock the original download.
 
 ## Rights
-PetuAI requests original compositions, but cannot guarantee copyright status or absence of third-party rights in every generated output.
+PetuAI can request original compositions but cannot guarantee copyright status or absence of third-party rights in every output.
 
 ## License
-Repository source code: Apache-2.0.
+Apache-2.0.
