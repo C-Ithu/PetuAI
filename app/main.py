@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="PetuCV", version="2.2.0")
+app = FastAPI(title="PetuCV", version="2.2.1")
 WEB = Path(__file__).parent / "web" / "index.html"
 
 @app.get("/", include_in_schema=False)
@@ -18,7 +18,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PetuCV", "version": "2.2.0"}
+    return {"status": "ok", "service": "PetuCV", "version": "2.2.1"}
 
 class SearchRequest(BaseModel):
     keywords: list[str] = Field(min_length=1, max_length=20)
@@ -28,7 +28,7 @@ def clean(value):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 def get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.2.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.2.1", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read())
 
@@ -179,6 +179,7 @@ def jobs(item: SearchRequest):
             searchable = title + " " + description + " " + clean(row.get("category"))
             found.append({
                 "score": score_job(searchable, title, terms, recent_terms),
+                "compatibility": score_job(searchable, title, terms, recent_terms),
                 "title": title, "location": location or "LATAM / Chile compatible",
                 "company": clean(row.get("company_name")), "description": summarize(description, 150),
                 "functions": "Revisar funciones en el aviso.", "url": url,
