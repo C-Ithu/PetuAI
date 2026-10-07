@@ -1,23 +1,16 @@
 # PetuCV
 
-PetuCV is a zero-paid-AI-consumption MVP for creating CVs and estimating ATS keyword compatibility.
+PetuCV compares an existing PDF CV with a public job-ad URL using a lightweight ATS-style keyword analysis.
 
-## Features
-- CV form and live document preview.
-- Job-description keyword analysis in the browser.
-- Estimated ATS compatibility score.
-- Matching and missing keyword suggestions.
-- Local browser storage.
-- PDF export through the browser print/PDF function.
+## Flow
+1. User uploads a PDF CV.
+2. PDF.js extracts text locally in the browser; the CV file is not uploaded for analysis.
+3. User supplies a public job-ad URL.
+4. PetuCV attempts to retrieve visible HTML text from the job page. Sites that block automated retrieval require manual job-description paste.
+5. Browser computes keyword overlap, score, matches and missing terms.
 
 ## Cost architecture
-The CV builder, ATS analysis and document preparation run client-side. No OpenAI, Hugging Face or paid generative API is called per user action.
+No paid AI API is used per analysis. PDF parsing and ATS comparison run client-side. The server only serves the app and retrieves publicly accessible job HTML.
 
-## Deployment
-FastAPI serves the static application. Render only hosts the lightweight web service.
-
-## Disclaimer
-ATS scoring is an estimate based on textual keyword matching and does not guarantee performance in any particular applicant tracking system or hiring process.
-
-## License
-Apache-2.0.
+## Limitations
+Scanned/image-only PDFs need OCR and are not supported in this MVP. LinkedIn and other protected/dynamic job sites may prevent automatic URL extraction. ATS score is an estimate and does not reproduce any specific employer ATS.
