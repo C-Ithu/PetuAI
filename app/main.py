@@ -24,6 +24,21 @@ def get_json(url):
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.loads(r.read())
 
+def summarize(text,limit):
+    text=clean(text)
+    if not text:return ""
+    parts=re.split(r"(?<=[.!?])\\s+",text)
+    out=""
+    for p in parts:
+        p=p.strip()
+        if not p:continue
+        candidate=(out+" "+p).strip()
+        if len(candidate)>limit:break
+        out=candidate
+        if len(out)>=limit*0.55:break
+    if not out:out=text[:limit].rsplit(" ",1)[0]
+    return out.rstrip(" .")+"."
+
 def parse(row,terms):
     a=row.get("attributes") or {}
     links=row.get("links") or {}
@@ -43,8 +58,8 @@ def parse(row,terms):
         "title":title,
         "location":location,
         "company":"",
-        "description":description[:260],
-        "functions":functions[:420] or "Revisar funciones en el aviso.",
+        "description":summarize(description,150),
+        "functions":summarize(functions,220) or "Revisar funciones en el aviso.",
         "url":url
     }
 
