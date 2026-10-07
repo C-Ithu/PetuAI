@@ -3,4 +3,5 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 pillow==11.1.0
 pydantic==2.10.5
+email-validator>=2.2.0,<3.0.0
 openai>=2.0.0,<3.0.0
