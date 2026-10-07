@@ -3,12 +3,12 @@ import json,re,urllib.request,urllib.parse
 from fastapi import FastAPI,HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
-app=FastAPI(title="PetuCV",version="1.4.0",description="Chile CV job matching using Get on Board")
+app=FastAPI(title="PetuCV",version="1.5.0",description="Chile CV job matching by role families")
 WEB=Path(__file__).parent/"web"/"index.html"
 @app.get("/",include_in_schema=False)
 def web_app():return FileResponse(WEB)
 @app.get("/health")
-def health():return {"status":"ok","service":"PetuCV","version":"1.4.0","product":"chile-job-matching"}
+def health():return {"status":"ok","service":"PetuCV","version":"1.5.0","product":"chile-job-matching"}
 class SearchRequest(BaseModel):keywords:list[str]=Field(min_length=1,max_length=12)
 def clean(s):return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",str(s or ""))).strip()
 CHILE=("chile","santiago","valparaiso","valparaíso","concepcion","concepción","antofagasta","temuco","rancagua","vina del mar","viña del mar","chillan","chillán","puerto montt","la serena","iquique","talca","copiapo","copiapó","calama","osorno")
@@ -40,7 +40,7 @@ def jobs(item:SearchRequest):
     for q in queries:
         try:
             url="https://www.getonbrd.com/api/v0/search/jobs?query="+urllib.parse.quote(q)+"&expand[]=company"
-            req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.4","Accept":"application/json"})
+            req=urllib.request.Request(url,headers={"User-Agent":"PetuCV/1.5","Accept":"application/json"})
             with urllib.request.urlopen(req,timeout=15) as r:data=json.loads(r.read())
             for row in data.get("data",[]):
                 j=normalize(row,terms)
