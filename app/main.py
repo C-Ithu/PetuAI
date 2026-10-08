@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="PetuCV", version="2.3.1")
+app = FastAPI(title="PetuCV", version="2.3.2")
 WEB = Path(__file__).parent / "web" / "index.html"
 
 @app.get("/", include_in_schema=False)
@@ -18,7 +18,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PetuCV", "version": "2.3.1"}
+    return {"status": "ok", "service": "PetuCV", "version": "2.3.2"}
 
 class SearchRequest(BaseModel):
     keywords: list[str] = Field(min_length=1, max_length=20)
@@ -328,8 +328,14 @@ def jobs(item: SearchRequest):
     except Exception:
         errors.append("bne")
 
+    # Relevance gate: compatibility ranks jobs, but unrelated jobs must not be shown.
+    # When recent work-experience terms were detected, require a meaningful score.
+    # For CVs without a detected experience section, use a slightly lower threshold.
+    min_score = 15 if recent_terms else 10
     unique, seen = [], set()
     for job in sorted(found, key=lambda x: x["score"], reverse=True):
+        if job["score"] < min_score:
+            continue
         if job["url"] not in seen:
             seen.add(job["url"])
             unique.append(job)
