@@ -6,7 +6,7 @@ import urllib.request
 import urllib.parse
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="PetuCV", version="2.2.2")
@@ -300,8 +300,9 @@ def jobs(item: SearchRequest):
             unique.append(job)
 
     message = None if unique else "No encontramos ofertas compatibles con tu perfil en Chile publicadas durante los últimos 5 días."
-    return {
+    payload = {
         "jobs": unique, "total": len(unique), "page_size": 20, "market": "Chile",
         "source": "Get on Board + Remote OK + Remotive + Himalayas + Jobicy + Arbeitnow + BNE", "message": message,
         "source_errors": len(errors),
     }
+    return JSONResponse(payload, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0"})
