@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="PetuCV", version="2.2.2")
+app = FastAPI(title="PetuCV", version="2.3.0")
 WEB = Path(__file__).parent / "web" / "index.html"
 
 @app.get("/", include_in_schema=False)
@@ -18,7 +18,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PetuCV", "version": "2.2.2"}
+    return {"status": "ok", "service": "PetuCV", "version": "2.3.0"}
 
 class SearchRequest(BaseModel):
     keywords: list[str] = Field(min_length=1, max_length=20)
@@ -29,15 +29,15 @@ def clean(value):
 
 def get_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": "PetuCV/2.2.2", "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=20) as response:
+    with urllib.request.urlopen(req, timeout=10) as response:
         return json.loads(response.read())
 
 def is_recent(value):
     if not value:
         return False
     try:
-        if isinstance(value, (int, float)):
-            dt = datetime.fromtimestamp(value, timezone.utc)
+        if isinstance(value, (int, float)) or (isinstance(value, str) and value.strip().isdigit()):
+            dt = datetime.fromtimestamp(float(value), timezone.utc)
         else:
             dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
             if dt.tzinfo is None:
@@ -202,23 +202,66 @@ def jobs(item: SearchRequest):
     except Exception:
         errors.append("himalayas")
 
+    # Jobicy: multiple geographical feeds, including globally eligible remote work.
     try:
-        data = get_json("https://jobicy.com/api/v2/remote-jobs?geo=latam&count=200")
-        for row in data.get("jobs", []):
-            published = row.get("pubDate")
-            if not is_recent(published):
-                continue
-            url = row.get("url")
-            if not url:
-                continue
-            title = clean(row.get("jobTitle") or "Empleo remoto")
-            description = clean(row.get("jobDescription") or row.get("jobExcerpt"))
-            location = clean(row.get("jobGeo")) or "LATAM / Chile compatible"
-            searchable = " ".join([title,description,clean(row.get("jobIndustry")),clean(row.get("jobType"))])
-            match = score_job(searchable,title,terms,recent_terms)
-            found.append({"score":match,"compatibility":match,"title":title,"location":location,"company":clean(row.get("companyName")),"description":summarize(description,150),"functions":"Revisar funciones en el aviso.","url":url,"source":"Jobicy","published_at":str(published)})
+        for geo in ("latam", "anywhere"):
+            cursor = None
+            for _ in range(3):
+                params = {"count": 200, "geo": geo}
+                if cursor:
+                    params["cursor"] = cursor
+                data = get_json("https://jobicy.com/api/v2/remote-jobs?" + urllib.parse.urlencode(params))
+                for row in data.get("jobs", []):
+                    published = row.get("pubDate")
+                    if not is_recent(published):
+                        continue
+                    url = row.get("url")
+                    if not url:
+                        continue
+                    title = clean(row.get("jobTitle") or "Empleo remoto")
+                    description = clean(row.get("jobDescription") or row.get("jobExcerpt"))
+                    location = clean(row.get("jobGeo")) or "Remoto"
+                    searchable = " ".join([title, description, clean(row.get("jobIndustry")), clean(row.get("jobType"))])
+                    match = score_job(searchable, title, terms, recent_terms)
+                    found.append({"score": match, "compatibility": match, "title": title,
+                                  "location": location, "company": clean(row.get("companyName")),
+                                  "description": summarize(description, 150),
+                                  "functions": "Revisar funciones en el aviso.", "url": url,
+                                  "source": "Jobicy", "published_at": str(published)})
+                cursor = data.get("nextCursor")
+                if not cursor:
+                    break
     except Exception:
         errors.append("jobicy")
+
+    # The Muse: additional general-industry job listings with public JSON API.
+    try:
+        for page in range(3):
+            data = get_json("https://www.themuse.com/api/public/jobs?" +
+                            urllib.parse.urlencode({"page": page, "descending": "true"}))
+            for row in data.get("results", []):
+                published = row.get("publication_date")
+                if not is_recent(published):
+                    continue
+                locations = [clean(x.get("name")) for x in row.get("locations", []) if isinstance(x, dict)]
+                location = ", ".join(locations)
+                geo = location.lower()
+                if not any(x in geo for x in ("chile", "latin america", "latam", "anywhere", "worldwide")):
+                    continue
+                url = (row.get("refs") or {}).get("landing_page")
+                if not url:
+                    continue
+                title = clean(row.get("name"))
+                description = clean(row.get("contents"))
+                searchable = title + " " + description + " " + clean(row.get("categories"))
+                match = score_job(searchable, title, terms, recent_terms)
+                found.append({"score": match, "compatibility": match, "title": title,
+                              "location": location, "company": clean((row.get("company") or {}).get("name")),
+                              "description": summarize(description, 150),
+                              "functions": "Revisar funciones en el aviso.", "url": url,
+                              "source": "The Muse", "published_at": str(published)})
+    except Exception:
+        errors.append("themuse")
 
     try:
         for page in (1, 2):
@@ -296,7 +339,7 @@ def jobs(item: SearchRequest):
     message = None if unique else "No encontramos ofertas compatibles con tu perfil en Chile publicadas durante los últimos 5 días."
     payload = {
         "jobs": unique, "total": len(unique), "page_size": 20, "market": "Chile",
-        "source": "Get on Board + Remote OK + Remotive + Himalayas + Jobicy + Arbeitnow + BNE", "message": message,
+        "source": "Get on Board + Remote OK + Remotive + Himalayas + Jobicy + The Muse + Arbeitnow + BNE", "message": message,
         "source_errors": len(errors),
     }
     return JSONResponse(payload, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0"})
