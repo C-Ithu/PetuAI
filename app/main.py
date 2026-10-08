@@ -118,21 +118,13 @@ def jobs(item: SearchRequest):
 
     try:
         categories = get_json("https://www.getonbrd.com/api/v0/categories?per_page=120").get("data", [])
-        preferred = ("program", "product", "operation", "data", "sysadmin", "devops", "machine", "agil", "project")
-        selected = []
-        for category in categories:
-            attrs = category.get("attributes") or {}
-            label = (str(attrs.get("name", "")) + " " + str(attrs.get("dimension", ""))).lower()
-            if any(word in label for word in preferred):
-                selected.append(category.get("id"))
-        if not selected:
-            selected = [c.get("id") for c in categories[:10] if c.get("id")]
+        selected = [c.get("id") for c in categories if c.get("id")]
         for category_id in selected:
             try:
                 data = get_json(f"https://www.getonbrd.com/api/v0/categories/{category_id}/jobs?country_code=cl&per_page=120")
                 for row in data.get("data", []):
                     job = parse_getonbrd(row, terms, recent_terms)
-                    if job:
+                    if job and job["score"] >= 20:
                         found.append(job)
             except Exception:
                 errors.append(f"getonbrd:{category_id}")
@@ -295,6 +287,8 @@ def jobs(item: SearchRequest):
 
     unique, seen = [], set()
     for job in sorted(found, key=lambda x: x["score"], reverse=True):
+        if job["score"] < 20:
+            continue
         if job["url"] not in seen:
             seen.add(job["url"])
             unique.append(job)
